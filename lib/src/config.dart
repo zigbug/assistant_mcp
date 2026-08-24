@@ -1,10 +1,14 @@
 import 'dart:io';
+
 import 'package:dotenv/dotenv.dart';
 
 /// Конфигурация MCP-сервера.
 ///
-/// Загружает настройки из .env файла или переменных окружения.
-/// Приоритет: переменные окружения > .env файл > дефолтные значения.
+/// Загружает настройки с приоритетом: переменные окружения > .env файл > дефолты.
+///
+/// В локальной разработке сервер запускается без .env — используются дефолты,
+/// совместимые с локальным бэкендом (localhost:8081, dev-ключ).
+/// В продакшене (Docker / VPS) значения задаются через env-переменные.
 class Config {
   /// URL бэкенда (без trailing slash)
   final String backendUrl;
@@ -12,10 +16,10 @@ class Config {
   /// API-ключ для аутентификации на бэкенде
   final String apiKey;
 
-  /// Имя MCP-сервера
+  /// Имя MCP-сервера (сообщается клиентам через MCP-протокол)
   final String serverName;
 
-  /// Версия MCP-сервера
+  /// Версия MCP-сервера (сообщается клиентам)
   final String serverVersion;
 
   Config._({
@@ -25,35 +29,22 @@ class Config {
     required this.serverVersion,
   });
 
-  /// Загружает конфигурацию из .env файла и переменных окружения.
-  ///
-  /// Выбрасывает [StateError], если обязательные настройки отсутствуют.
+  /// Загружает конфигурацию с учётом приоритетов:
+  /// переменные окружения > .env файл > дефолты для локальной разработки.
   factory Config.load() {
     final env = DotEnv(includePlatformEnvironment: true);
 
-    // Пытаемся загрузить .env файл, если он существует
+    // Пытаемся загрузить .env файл, если он существует в рабочей директории
     final envFile = File('.env');
     if (envFile.existsSync()) {
       env.load(['.env']);
     }
 
-    final backendUrl = env['BACKEND_URL'];
-    if (backendUrl == null || backendUrl.isEmpty) {
-      throw StateError(
-        'BACKEND_URL is required. Set it in .env or environment variable.',
-      );
-    }
-
-    final apiKey = env['API_KEY'];
-    if (apiKey == null || apiKey.isEmpty) {
-      throw StateError(
-        'API_KEY is required. Set it in .env or environment variable.',
-      );
-    }
-
+    // Дефолты для локальной разработки — совместимы с `dart run bin/server.dart`
+    // бэкенда из соседней директории assistant_backend.
     return Config._(
-      backendUrl: backendUrl,
-      apiKey: apiKey,
+      backendUrl: env['BACKEND_URL'] ?? 'http://localhost:8081/api/v1',
+      apiKey: env['API_KEY'] ?? 'dev-key-change-me-in-production',
       serverName: env['SERVER_NAME'] ?? 'assistant-mcp',
       serverVersion: env['SERVER_VERSION'] ?? '0.1.0',
     );

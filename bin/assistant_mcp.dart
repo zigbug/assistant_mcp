@@ -7,7 +7,15 @@ import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 /// Точка входа MCP-сервера.
 ///
 /// Загружает конфигурацию, создаёт API-клиент и MCP-сервер,
-/// затем запускает сервер в stdio-режиме.
+/// затем запускает сервер в одном из двух режимов:
+///   - `stdio` (по умолчанию) — для локальных MCP-клиентов, которые сами
+///     запускают процесс (Claude Desktop и т.п.).
+///   - `http` — Streamable HTTP, для Qwen Desktop и будущего деплоя на VPS.
+///
+/// Примеры запуска:
+///   dart run bin/assistant_mcp.dart                      # stdio
+///   dart run bin/assistant_mcp.dart --transport=http     # HTTP на :8082
+///   dart run bin/assistant_mcp.dart --transport=http --port=9090
 void main(List<String> arguments) async {
   // Настраиваем логирование
   _setupLogging();
@@ -33,30 +41,109 @@ void main(List<String> arguments) async {
       logger.warning('  MCP server will start, but tools may fail until backend is available.');
     }
 
-    // Создаём MCP-сервер
-    final server = createMcpServer(config, api);
-    logger.info('✓ MCP server created with all tools');
+    // === Выбор транспорта ===
+    final transportType = _argValue(arguments, '--transport') ?? 'stdio';
+    final port = int.tryParse(
+          _argValue(arguments, '--port') ??
+              Platform.environment['MCP_PORT'] ??
+              '',
+        ) ??
+        8082;
 
-    // Выводим информацию о запуске
-    print('');
-    print('=' * 60);
-    print('  Assistant MCP Server is running!');
-    print('  Transport: stdio (stdin/stdout)');
-    print('  Backend: ${config.backendUrl}');
-    print('  Tools: 8 (4 tasks + 4 plans)');
-    print('=' * 60);
-    print('');
-
-    // Запускаем сервер с stdio транспортом
-    // stdout используется для MCP protocol messages
-    // stderr используется для логов
-    final transport = StdioServerTransport();
-    await server.connect(transport);
+    switch (transportType) {
+      case 'http':
+        await _startHttpServer(config, api, port, logger);
+        break;
+      case 'stdio':
+      default:
+        await _startStdioTransport(config, api, logger);
+        break;
+    }
   } catch (e, stackTrace) {
     stderr.writeln('Fatal error: $e');
     stderr.writeln(stackTrace);
     exit(1);
   }
+}
+
+/// Запуск MCP-сервера через Streamable HTTP.
+///
+/// Поднимает HTTP-сервер на указанном порту, принимает MCP JSON-RPC
+/// сообщения через POST /mcp и отдаёт события через SSE GET /mcp.
+/// Подходит для Qwen Desktop и для будущего деплоя на VPS.
+Future<void> _startHttpServer(
+  Config config,
+  ApiClient api,
+  int port,
+  Logger logger,
+) async {
+  // StreamableMcpServer автоматически:
+  //  - создаёт HTTP-сервер (HttpServer.bind)
+  //  - роутит POST/GET запросы на /mcp
+  //  - создаёт отдельный McpServer для каждой сессии через serverFactory
+  //  - обрабатывает stateless-режим MCP 2026-07-28 и legacy-сессии MCP 2025-11-25
+  final httpServer = StreamableMcpServer(
+    serverFactory: (connectionId) => createMcpServer(config, api),
+    host: 'localhost',
+    port: port,
+    path: '/mcp',
+    // Включаем защиту от DNS-rebinding: сервер будет принимать запросы
+    // только с Host: localhost. Предотвращает атаки через подмену домена.
+    enableDnsRebindingProtection: true,
+    allowedHosts: {'localhost', '127.0.0.1'},
+  );
+
+  await httpServer.start();
+
+  logger.info('✓ HTTP MCP server started on port $port');
+
+  // В HTTP-режиме stdout свободен — можно печатать баннер в stdout
+  // (в отличие от stdio, где stdout занят JSON-RPC протоколом).
+  stdout.writeln('');
+  stdout.writeln('=' * 60);
+  stdout.writeln('  Assistant MCP Server is running!');
+  stdout.writeln('  Transport: Streamable HTTP');
+  stdout.writeln('  URL: http://localhost:$port/mcp');
+  stdout.writeln('  Backend: ${config.backendUrl}');
+  stdout.writeln('  Tools: 8 (4 tasks + 4 plans)');
+  stdout.writeln('=' * 60);
+  stdout.writeln('');
+}
+
+/// Запуск MCP-сервера через stdio (stdin/stdout).
+///
+/// Подходит для локальных MCP-клиентов, которые запускают процесс сами
+/// и общаются через stdin/stdout в формате JSON-RPC.
+///
+/// ВАЖНО: в этом режиме stdout ЗАРЕЗЕРВИРОВАН под MCP-протокол.
+/// Никаких print() в stdout — только логи в stderr через logger!
+Future<void> _startStdioTransport(
+  Config config,
+  ApiClient api,
+  Logger logger,
+) async {
+  final server = createMcpServer(config, api);
+
+  // Подключаем транспорт. После connect() сервер начинает слушать stdin
+  // и писать JSON-RPC ответы в stdout.
+  final transport = StdioServerTransport();
+  await server.connect(transport);
+
+  // Логируем в stderr — stdout уже занят JSON-RPC.
+  logger.info('✓ MCP server connected via stdio transport');
+}
+
+/// Извлекает значение аргумента командной строки.
+///
+/// Поддерживает оба формата:
+///   --name value
+///   --name=value
+String? _argValue(List<String> args, String name) {
+  for (var i = 0; i < args.length; i++) {
+    if (args[i] == name && i + 1 < args.length) return args[i + 1];
+    if (args[i].startsWith('$name=')) return args[i].substring(name.length + 1);
+  }
+  return null;
 }
 
 /// Настраивает логирование.

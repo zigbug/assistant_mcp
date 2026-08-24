@@ -4,12 +4,13 @@ MCP-сервер для AI-ассистента. Предоставляет tool
 
 ## Архитектура
 
+### Режим stdio (локальный):
 ```
 ┌─────────────────┐
-│  Qwen Desktop   │ ← AI-модель (MCP-клиент)
-│  (MCP Client)   │
+│  MCP Client     │ ← Qwen Desktop, Claude Desktop, etc.
+│  (запускает процесс)│
 └────────┬────────┘
-         │ MCP Protocol (stdio)
+         │ stdin/stdout (JSON-RPC)
          ▼
 ┌─────────────────┐
 │  MCP Server     │ ← Этот проект (Dart)
@@ -18,8 +19,26 @@ MCP-сервер для AI-ассистента. Предоставляет tool
          │ HTTP REST API
          ▼
 ┌─────────────────┐
-│  Backend API    │ ← assistant_backend (Dart + shelf + Drift)
-│  (localhost:8081)│
+│  Backend API    │ ← assistant_backend
+└─────────────────┘
+```
+
+### Режим HTTP (для Qwen Desktop и VPS):
+```
+┌─────────────────┐
+│  Qwen Desktop   │ ← AI-модель (MCP-клиент)
+│  (MCP Client)   │
+└────────┬────────┘
+         │ Streamable HTTP (POST /mcp + SSE GET /mcp)
+         ▼
+┌─────────────────┐
+│  MCP Server     │ ← Этот проект (Dart)
+│  (:8082/mcp)    │
+└────────┬────────┘
+         │ HTTP REST API
+         ▼
+┌─────────────────┐
+│  Backend API    │ ← assistant_backend
 └─────────────────┘
 ```
 
@@ -75,11 +94,29 @@ MCP-сервер для AI-ассистента. Предоставляет tool
    ```
 
 4. **Запустите сервер:**
+   
+   **Режим stdio (по умолчанию):**
    ```bash
    dart run bin/assistant_mcp.dart
    ```
    
-   Вы увидите:
+   **Режим HTTP (для Qwen Desktop и будущего VPS):**
+   ```bash
+   dart run bin/assistant_mcp.dart --transport=http
+   ```
+   
+   По умолчанию HTTP-сервер слушает на порту 8082. Можно указать свой порт:
+   ```bash
+   dart run bin/assistant_mcp.dart --transport=http --port=9090
+   ```
+   
+   Или через переменную окружения:
+   ```bash
+   export MCP_PORT=9090
+   dart run bin/assistant_mcp.dart --transport=http
+   ```
+   
+   Для stdio-режима вы увидите:
    ```
    ============================================================
      Assistant MCP Server is running!
@@ -88,8 +125,41 @@ MCP-сервер для AI-ассистента. Предоставляет tool
      Tools: 8 (4 tasks + 4 plans)
    ============================================================
    ```
+   
+   Для HTTP-режима:
+   ```
+   ============================================================
+     Assistant MCP Server is running!
+     Transport: Streamable HTTP
+     URL: http://localhost:8082/mcp
+     Backend: http://localhost:8081/api/v1
+     Tools: 8 (4 tasks + 4 plans)
+   ============================================================
+   ```
 
 ## Подключение к Qwen Desktop
+
+### Вариант 1: Streamable HTTP (рекомендуется)
+
+1. Запустите MCP-сервер в HTTP-режиме:
+   ```bash
+   dart run bin/assistant_mcp.dart --transport=http
+   ```
+
+2. Откройте настройки Qwen Desktop
+3. Перейдите в раздел **MCP Servers**
+4. Добавьте новый сервер:
+   - **Имя:** `assistant`
+   - **Описание:** `Личный ассистент: задачи, проекты, планы дня`
+   - **Тип:** `StreamableHTTP`
+   - **URL:** `http://localhost:8082/mcp`
+
+5. Нажмите **Сохранить и включить**
+6. Проверьте, что сервер появился в списке и имеет статус "подключен"
+
+### Вариант 2: STDIO
+
+Если Qwen Desktop поддерживает запуск произвольных команд через stdio:
 
 1. Откройте настройки Qwen Desktop
 2. Перейдите в раздел **MCP Servers**

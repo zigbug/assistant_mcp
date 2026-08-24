@@ -1,3 +1,49 @@
 # https://dart.dev/guides/libraries/private-files
-# Created by `dart pub`
+# Создан `dart pub`
 .dart_tool/
+.packages
+.pub/
+.pub-cache/
+
+# Сборка
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# SQLite-базы (локальная разработка, если вдруг появятся)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+data/
+
+# Environment variables — НИКОГДА не коммитим реальные секреты
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Сгенерированные файлы
+*.g.dart
+
+# Логи
+*.log
+logs/
+
+# Покрытие тестами
+coverage/
