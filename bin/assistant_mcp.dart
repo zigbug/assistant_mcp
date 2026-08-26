@@ -38,12 +38,15 @@ void main(List<String> arguments) async {
       logger.info('✓ Backend is reachable');
     } else {
       logger.warning('⚠ Backend is not reachable at ${config.backendUrl}');
-      logger.warning('  MCP server will start, but tools may fail until backend is available.');
+      logger.warning(
+        '  MCP server will start, but tools may fail until backend is available.',
+      );
     }
 
     // === Выбор транспорта ===
     final transportType = _argValue(arguments, '--transport') ?? 'stdio';
-    final port = int.tryParse(
+    final port =
+        int.tryParse(
           _argValue(arguments, '--port') ??
               Platform.environment['MCP_PORT'] ??
               '',
@@ -52,7 +55,14 @@ void main(List<String> arguments) async {
 
     switch (transportType) {
       case 'http':
-        await _startHttpServer(config, api, port, logger);
+        final host = Platform.environment['MCP_HOST'] ?? 'localhost';
+        final allowedHosts =
+            (Platform.environment['MCP_ALLOWED_HOSTS'] ?? 'localhost,127.0.0.1')
+                .split(',')
+                .map((h) => h.trim())
+                .where((h) => h.isNotEmpty)
+                .toSet();
+        await _startHttpServer(config, api, host, allowedHosts, port, logger);
         break;
       case 'stdio':
       default:
@@ -70,10 +80,19 @@ void main(List<String> arguments) async {
 ///
 /// Поднимает HTTP-сервер на указанном порту, принимает MCP JSON-RPC
 /// сообщения через POST /mcp и отдаёт события через SSE GET /mcp.
-/// Подходит для Qwen Desktop и для будущего деплоя на VPS.
+/// Подходит для Qwen Desktop и для деплоя на VPS (Docker).
+///
+/// [host] — интерфейс привязки: `localhost` локально, `0.0.0.0` в Docker,
+/// чтобы сервер был доступен через опубликованный порт.
+///
+/// [allowedHosts] — белый список заголовка Host для защиты от DNS-rebinding.
+/// В Docker/за reverse-proxy добавьте сюда домен, с которым ходят клиенты
+/// (например, assistant.example.com).
 Future<void> _startHttpServer(
   Config config,
   ApiClient api,
+  String host,
+  Set<String> allowedHosts,
   int port,
   Logger logger,
 ) async {
@@ -84,18 +103,18 @@ Future<void> _startHttpServer(
   //  - обрабатывает stateless-режим MCP 2026-07-28 и legacy-сессии MCP 2025-11-25
   final httpServer = StreamableMcpServer(
     serverFactory: (connectionId) => createMcpServer(config, api),
-    host: 'localhost',
+    host: host,
     port: port,
     path: '/mcp',
-    // Включаем защиту от DNS-rebinding: сервер будет принимать запросы
-    // только с Host: localhost. Предотвращает атаки через подмену домена.
+    // Включаем защиту от DNS-rebinding: принимаем запросы только
+    // с разрешёнными Host-заголовками.
     enableDnsRebindingProtection: true,
-    allowedHosts: {'localhost', '127.0.0.1'},
+    allowedHosts: allowedHosts,
   );
 
   await httpServer.start();
 
-  logger.info('✓ HTTP MCP server started on port $port');
+  logger.info('✓ HTTP MCP server started on $host:$port');
 
   // В HTTP-режиме stdout свободен — можно печатать баннер в stdout
   // (в отличие от stdio, где stdout занят JSON-RPC протоколом).
@@ -103,7 +122,8 @@ Future<void> _startHttpServer(
   stdout.writeln('=' * 60);
   stdout.writeln('  Assistant MCP Server is running!');
   stdout.writeln('  Transport: Streamable HTTP');
-  stdout.writeln('  URL: http://localhost:$port/mcp');
+  stdout.writeln('  URL: http://$host:$port/mcp');
+  stdout.writeln('  Allowed hosts: ${allowedHosts.join(', ')}');
   stdout.writeln('  Backend: ${config.backendUrl}');
   stdout.writeln('  Tools: 8 (4 tasks + 4 plans)');
   stdout.writeln('=' * 60);

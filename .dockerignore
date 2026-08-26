@@ -6,3 +6,9 @@ build/
 *.log
 .idea/
 .vscode/
+
+# Не нужно внутри образа
+test/
+docker-compose*.yml
+README.md
+CHANGELOG.md
