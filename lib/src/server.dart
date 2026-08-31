@@ -5,6 +5,7 @@ import 'api_client.dart';
 import 'config.dart';
 import 'tools/plans_tools.dart';
 import 'tools/tasks_tools.dart';
+import 'tools/time_tools.dart';
 
 /// Создаёт и настраивает MCP-сервер.
 ///
@@ -35,9 +36,14 @@ McpServer createMcpServer(Config config, ApiClient api) {
   logger.info('Registering plans tools...');
   registerPlansTools(server, api);
 
+  // Регистрируем tool для времени
+  logger.info('Registering time tools...');
+  registerTimeTools(server, api);
+
   logger.info('✓ All tools registered successfully');
   logger.info('  - Tasks: list_tasks, create_task, update_task, delete_task');
   logger.info('  - Plans: get_today_plan, generate_plan, get_plan_stats, update_plan_item');
+  logger.info('  - Time: get_current_time');
 
   return server;
 }

@@ -125,7 +125,7 @@ Future<void> _startHttpServer(
   stdout.writeln('  URL: http://$host:$port/mcp');
   stdout.writeln('  Allowed hosts: ${allowedHosts.join(', ')}');
   stdout.writeln('  Backend: ${config.backendUrl}');
-  stdout.writeln('  Tools: 8 (4 tasks + 4 plans)');
+  stdout.writeln('  Tools: 9 (4 tasks + 4 plans + 1 time)');
   stdout.writeln('=' * 60);
   stdout.writeln('');
 }
