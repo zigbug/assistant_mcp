@@ -3,6 +3,7 @@ import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 
 import 'api_client.dart';
 import 'config.dart';
+import 'tools/events_tools.dart';
 import 'tools/plans_tools.dart';
 import 'tools/tasks_tools.dart';
 import 'tools/time_tools.dart';
@@ -36,6 +37,10 @@ McpServer createMcpServer(Config config, ApiClient api) {
   logger.info('Registering plans tools...');
   registerPlansTools(server, api);
 
+  // Регистрируем tools для событий
+  logger.info('Registering events tools...');
+  registerEventsTools(server, api);
+
   // Регистрируем tool для времени
   logger.info('Registering time tools...');
   registerTimeTools(server, api);
@@ -43,6 +48,7 @@ McpServer createMcpServer(Config config, ApiClient api) {
   logger.info('✓ All tools registered successfully');
   logger.info('  - Tasks: list_tasks, create_task, update_task, delete_task');
   logger.info('  - Plans: get_today_plan, generate_plan, get_plan_stats, update_plan_item');
+  logger.info('  - Events: list_events, create_event, update_event, delete_event');
   logger.info('  - Time: get_current_time');
 
   return server;

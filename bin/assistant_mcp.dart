@@ -123,9 +123,9 @@ Future<void> _startHttpServer(
   stdout.writeln('  Assistant MCP Server is running!');
   stdout.writeln('  Transport: Streamable HTTP');
   stdout.writeln('  URL: http://$host:$port/mcp');
-  stdout.writeln('  Allowed hosts: ${allowedHosts.join(', ')}');
-  stdout.writeln('  Backend: ${config.backendUrl}');
-  stdout.writeln('  Tools: 9 (4 tasks + 4 plans + 1 time)');
+    stdout.writeln('  Allowed hosts: ${allowedHosts.join(', ')}');
+    stdout.writeln('  Backend: ${config.backendUrl}');
+    stdout.writeln('  Tools: 13 (4 tasks + 4 plans + 4 events + 1 time)');
   stdout.writeln('=' * 60);
   stdout.writeln('');
 }

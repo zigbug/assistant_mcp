@@ -58,6 +58,26 @@ MCP-сервер для AI-ассистента. Предоставляет tool
 - **`get_plan_stats`** — Получить статистику по плану (% выполнения, время)
 - **`update_plan_item`** — Обновить элемент плана (статус, reschedule, заметка)
 
+### Events (События)
+
+- **`list_events`** — Получить список событий (фильтры `today|upcoming|all`, `days`)
+- **`create_event`** — Создать событие (в т.ч. повторяющееся по будням и «мягкое»)
+- **`update_event`** — Обновить событие (время, повторение, мягкость)
+- **`delete_event`** — Удалить событие (destructive)
+
+Событие — жёсткий блок времени, который нельзя «выполнить», можно только занять.
+
+**Повторение по будням.** `recurrence: "daily"` + `by_weekdays: ["mon","tue","wed","thu","fri"]`.
+Поле принимает массив имён дней (`mon`…`sun`).
+
+**Мягкие события (`can_overlap: true`).** Событие, которое может пересекаться с
+другими и само не считается конфликтом. Рабочий блок 10:00–12:00 — жёсткий
+(`can_overlap: false`), а звонок «записаться на приём к врачу» на 5 минут внутри
+него — мягкий (`can_overlap: true`): время занято блоком, но звонок его не ломает.
+
+**`ends_at` обязателен** для событий с временем — без него длительность неизвестна.
+Для события на целый день укажите `is_all_day: true` вместо `ends_at`.
+
 ### Time (Время)
 
 - **`get_current_time`** — Получить текущее время и часовой пояс бэкенда (UTC, локальное время, смещение) — для определения момента «сейчас»
@@ -122,12 +142,12 @@ MCP-сервер для AI-ассистента. Предоставляет tool
    
    Для stdio-режима вы увидите:
    ```
-   ============================================================
-     Assistant MCP Server is running!
-     Transport: stdio (stdin/stdout)
-     Backend: http://localhost:8081/api/v1
-     Tools: 9 (4 tasks + 4 plans + 1 time)
-   ============================================================
+    ============================================================
+      Assistant MCP Server is running!
+      Transport: stdio (stdin/stdout)
+      Backend: http://localhost:8081/api/v1
+      Tools: 13 (4 tasks + 4 plans + 4 events + 1 time)
+    ============================================================
    ```
    
    Для HTTP-режима:
@@ -137,7 +157,7 @@ MCP-сервер для AI-ассистента. Предоставляет tool
      Transport: Streamable HTTP
      URL: http://localhost:8082/mcp
      Backend: http://localhost:8081/api/v1
-     Tools: 9 (4 tasks + 4 plans + 1 time)
+      Tools: 13 (4 tasks + 4 plans + 4 events + 1 time)
    ============================================================
    ```
 
@@ -210,7 +230,8 @@ assistant_mcp/
 │       ├── server.dart             # Создание MCP-сервера
 │       └── tools/
 │           ├── tasks_tools.dart    # Tools для задач
-│           ├── plans_tools.dart    # Tools для планов
+│           ├── plans_tools.dart     # Tools для планов
+│           ├── events_tools.dart    # Tools для событий
 │           └── time_tools.dart     # Tool для времени
 ├── test/
 │   └── assistant_mcp_test.dart     # Тесты
