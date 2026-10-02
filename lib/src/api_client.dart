@@ -18,18 +18,19 @@ class ApiClient {
   ///
   /// [endpoint] — путь без базового URL (например, '/tasks').
   /// [queryParams] — опциональные query-параметры.
-  Future<dynamic> get(String endpoint, [Map<String, String>? queryParams]) async {
-    final uri = Uri.parse('${_config.backendUrl}$endpoint')
-        .replace(queryParameters: queryParams);
+  Future<dynamic> get(
+    String endpoint, [
+    Map<String, String>? queryParams,
+  ]) async {
+    final uri = Uri.parse(
+      '${_config.backendUrl}$endpoint',
+    ).replace(queryParameters: queryParams);
 
     _logger.fine('GET $uri');
 
     final response = await _httpClient.get(
       uri,
-      headers: {
-        'x-api-key': _config.apiKey,
-        'Accept': 'application/json',
-      },
+      headers: {'x-api-key': _config.apiKey, 'Accept': 'application/json'},
     );
 
     return _handleResponse(response);
@@ -91,10 +92,7 @@ class ApiClient {
 
     final response = await _httpClient.delete(
       uri,
-      headers: {
-        'x-api-key': _config.apiKey,
-        'Accept': 'application/json',
-      },
+      headers: {'x-api-key': _config.apiKey, 'Accept': 'application/json'},
     );
 
     // Для DELETE 204 No Content — это успех
@@ -111,10 +109,12 @@ class ApiClient {
   Future<bool> checkHealth() async {
     try {
       // Health check endpoint не требует API-ключа
-      final uri = Uri.parse(_config.backendUrl.replaceAll('/api/v1', '/health'));
-      final response = await _httpClient.get(uri).timeout(
-        const Duration(seconds: 5),
+      final uri = Uri.parse(
+        _config.backendUrl.replaceAll('/api/v1', '/health'),
       );
+      final response = await _httpClient
+          .get(uri)
+          .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (e) {
       _logger.warning('Health check failed: $e');
@@ -175,12 +175,9 @@ class ApiException implements Exception {
   final String message;
   final String? body;
 
-  ApiException({
-    required this.statusCode,
-    required this.message,
-    this.body,
-  });
+  ApiException({required this.statusCode, required this.message, this.body});
 
   @override
-  String toString() => 'ApiException(statusCode: $statusCode, message: $message)';
+  String toString() =>
+      'ApiException(statusCode: $statusCode, message: $message)';
 }

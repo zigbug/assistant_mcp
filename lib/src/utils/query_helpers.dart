@@ -84,7 +84,11 @@ extension JsonBodyExtension on Map<String, dynamic> {
   /// body.copyFrom(args, 'project_id', 'projectId');
   /// // Если args['project_id'] != null, то body['projectId'] = args['project_id']
   /// ```
-  void copyFrom(Map<String, dynamic> source, String sourceKey, String targetKey) {
+  void copyFrom(
+    Map<String, dynamic> source,
+    String sourceKey,
+    String targetKey,
+  ) {
     final value = source[sourceKey];
     if (value != null) {
       this[targetKey] = value;

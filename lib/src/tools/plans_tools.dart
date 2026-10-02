@@ -2,6 +2,7 @@ import 'package:logging/logging.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 
 import '../api_client.dart';
+import '../utils/date_format.dart';
 import '../utils/query_helpers.dart';
 
 /// Регистрирует tools для работы с планами на день.
@@ -17,7 +18,8 @@ void registerPlansTools(McpServer server, ApiClient api) {
   // === get_today_plan ===
   server.registerTool(
     'get_today_plan',
-    description: 'Получить план на сегодняшний день. Возвращает все элементы '
+    description:
+        'Получить план на сегодняшний день. Возвращает все элементы '
         '(задачи, события, перерывы) с их статусами и временными слотами.',
     inputSchema: JsonSchema.object(),
     callback: (args, extra) async {
@@ -30,18 +32,23 @@ void registerPlansTools(McpServer server, ApiClient api) {
           return CallToolResult(
             content: [
               TextContent(
-                text: 'План на сегодня ещё не создан. '
+                text:
+                    'План на сегодня ещё не создан. '
                     'Используйте generate_plan для создания плана.',
               ),
             ],
           );
         }
 
-        final buffer = StringBuffer('📅 План на сегодня:\n\n');
-        buffer.writeln('Дата: ${plan['date']}');
-        buffer.writeln('Статус: ${plan['status']}\n');
-
+        // Бэкенд отдаёт `{plan: {...}, items: [...]}`: метаданные плана лежат
+        // во вложенном объекте, а список элементов — на верхнем уровне.
+        final meta = _planMeta(plan);
         final items = plan['items'] as List? ?? [];
+
+        final buffer = StringBuffer('📅 План на сегодня:\n\n');
+        buffer.writeln('Дата: ${localDateOnly(meta['date'])}');
+        buffer.writeln('Статус: ${meta['status']}\n');
+
         if (items.isEmpty) {
           buffer.writeln('Элементов в плане нет.');
         } else {
@@ -53,9 +60,9 @@ void registerPlansTools(McpServer server, ApiClient api) {
             final typeEmoji = _typeEmoji(type);
 
             buffer.writeln(
-                '$statusEmoji $typeEmoji ${item['note'] ?? 'Без названия'}');
-            buffer.writeln(
-                '   Время: ${item['startTime'] ?? '?'} - ${item['endTime'] ?? '?'}');
+              '$statusEmoji $typeEmoji ${item['note'] ?? 'Без названия'}',
+            );
+            buffer.writeln('   Время: ${_itemRange(item)}');
             buffer.writeln('   Статус: $status');
             if (item['id'] != null) {
               buffer.writeln('   ID элемента: ${item['id']}');
@@ -64,9 +71,7 @@ void registerPlansTools(McpServer server, ApiClient api) {
           }
         }
 
-        return CallToolResult(
-          content: [TextContent(text: buffer.toString())],
-        );
+        return CallToolResult(content: [TextContent(text: buffer.toString())]);
       } catch (e) {
         logger.severe('Error in get_today_plan: $e');
         return CallToolResult(
@@ -80,13 +85,15 @@ void registerPlansTools(McpServer server, ApiClient api) {
   // === generate_plan ===
   server.registerTool(
     'generate_plan',
-    description: 'Сгенерировать план на указанную дату. '
+    description:
+        'Сгенерировать план на указанную дату. '
         'Собирает задачи, события и просроченные задачи в единый план. '
         'Если план уже существует, он будет пересоздан (идемпотентная операция).',
     inputSchema: JsonSchema.object(
       properties: {
         'date': JsonSchema.string(
-          description: 'Дата в формате YYYY-MM-DD. '
+          description:
+              'Дата в формате YYYY-MM-DD. '
               'Если не указана — используется сегодняшняя дата.',
         ),
       },
@@ -99,14 +106,17 @@ void registerPlansTools(McpServer server, ApiClient api) {
         final queryParams = <String, String>{};
         queryParams.addIfPresent('date', args['date']);
 
-        final plan = await api.post('/daily-plans/generate', queryParams);
+        final result = await api.post('/daily-plans/generate', queryParams);
+
+        // Ответ: `{plan: {...}, items: [...], stats: {...}}`.
+        final meta = _planMeta(result);
+        final items = result['items'] as List? ?? [];
 
         final buffer = StringBuffer('✓ План успешно сгенерирован!\n\n');
-        buffer.writeln('ID плана: ${plan['id']}');
-        buffer.writeln('Дата: ${plan['date']}');
-        buffer.writeln('Статус: ${plan['status']}\n');
+        buffer.writeln('ID плана: ${meta['id']}');
+        buffer.writeln('Дата: ${localDateOnly(meta['date'])}');
+        buffer.writeln('Статус: ${meta['status']}\n');
 
-        final items = plan['items'] as List? ?? [];
         buffer.writeln('Элементов в плане: ${items.length}');
 
         // Краткая статистика
@@ -118,13 +128,28 @@ void registerPlansTools(McpServer server, ApiClient api) {
         if (stats.isNotEmpty) {
           buffer.writeln('\nСостав:');
           stats.forEach((type, count) {
-            buffer.writeln('  • $type: $count');
+            buffer.writeln('  • ${_typeEmoji(type)} $type: $count');
           });
         }
 
-        return CallToolResult(
-          content: [TextContent(text: buffer.toString())],
+        if (items.isNotEmpty) {
+          buffer.writeln('\nЭлементы:');
+          for (final item in items) {
+            final status = item['status'] ?? 'planned';
+            final note = item['note'] ?? 'Без названия';
+            buffer.writeln(
+              '  ${_statusEmoji(status)} ${_typeEmoji(item['itemType'] ?? '')} $note',
+            );
+            buffer.writeln('     ${_itemRange(item)}');
+          }
+        }
+
+        buffer.writeln(
+          '\nВнимание: генерация плана пересоздаёт его с нуля — прежние '
+          'отметки о выполнении и заметки будут потеряны.',
         );
+
+        return CallToolResult(content: [TextContent(text: buffer.toString())]);
       } catch (e) {
         logger.severe('Error in generate_plan: $e');
         return CallToolResult(
@@ -138,7 +163,8 @@ void registerPlansTools(McpServer server, ApiClient api) {
   // === get_plan_stats ===
   server.registerTool(
     'get_plan_stats',
-    description: 'Получить статистику по плану на день: процент выполнения, '
+    description:
+        'Получить статистику по плану на день: процент выполнения, '
         'разбивку по статусам, затраченное и запланированное время.',
     inputSchema: JsonSchema.object(
       properties: {
@@ -153,27 +179,30 @@ void registerPlansTools(McpServer server, ApiClient api) {
 
         final planId = args['plan_id'];
 
-        // Для today нужно сначала получить ID плана
+        // Для today нужно сначала получить ID плана.
         dynamic stats;
         if (planId == null) {
-          final plan = await api.get('/daily-plans/today');
-          if (plan == null || plan['id'] == null) {
+          final response = await api.get('/daily-plans/today');
+          // Метаданные плана — во вложенном объекте `plan`.
+          final meta = _planMeta(response);
+          if (meta['id'] == null) {
             return CallToolResult(
               content: [
                 TextContent(
-                  text: 'План на сегодня не найден. '
+                  text:
+                      'План на сегодня не найден. '
                       'Сначала сгенерируйте план через generate_plan.',
                 ),
               ],
             );
           }
-          stats = await api.get('/daily-plans/${plan['id']}/stats');
+          stats = await api.get('/daily-plans/${meta['id']}/stats');
         } else {
           stats = await api.get('/daily-plans/$planId/stats');
         }
 
         final buffer = StringBuffer('📊 Статистика плана:\n\n');
-        buffer.writeln('Дата: ${stats['date']}');
+        buffer.writeln('Дата: ${localDateOnly(stats['date'])}');
         buffer.writeln('Общий статус: ${stats['status']}\n');
 
         buffer.writeln('Всего элементов: ${stats['totalItems']}');
@@ -189,12 +218,11 @@ void registerPlansTools(McpServer server, ApiClient api) {
 
         buffer.writeln('\nВремя:');
         buffer.writeln(
-            '  • Запланировано: ${stats['timeEstimatedMinutes'] ?? 0} мин');
+          '  • Запланировано: ${stats['timeEstimatedMinutes'] ?? 0} мин',
+        );
         buffer.writeln('  • Затрачено: ${stats['timeSpentMinutes'] ?? 0} мин');
 
-        return CallToolResult(
-          content: [TextContent(text: buffer.toString())],
-        );
+        return CallToolResult(content: [TextContent(text: buffer.toString())]);
       } catch (e) {
         logger.severe('Error in get_plan_stats: $e');
         return CallToolResult(
@@ -208,7 +236,8 @@ void registerPlansTools(McpServer server, ApiClient api) {
   // === update_plan_item ===
   server.registerTool(
     'update_plan_item',
-    description: 'Обновить элемент плана: изменить статус, добавить заметку, '
+    description:
+        'Обновить элемент плана: изменить статус, добавить заметку, '
         'перенести на другое время.',
     inputSchema: JsonSchema.object(
       properties: {
@@ -273,6 +302,32 @@ void registerPlansTools(McpServer server, ApiClient api) {
       }
     },
   );
+}
+
+/// Достаёт метаданные плана из ответа бэкенда.
+///
+/// Эндпоинты планов отдают `{plan: {...}, items: [...], stats: {...}}` —
+/// дата, статус и id лежат во вложенном объекте `plan`, а список элементов
+/// на верхнем уровне. Если сервер когда-нибудь начнёт отдавать метаданные
+/// плоско, функция вернёт сам ответ.
+Map<String, dynamic> _planMeta(Object? response) {
+  if (response is! Map) return const {};
+  final source = response['plan'] is Map ? response['plan'] as Map : response;
+  return source.map((key, value) => MapEntry(key.toString(), value));
+}
+
+/// Время элемента плана в читаемом виде.
+///
+/// Задача без `estimatedMinutes` кладётся в план на полночь своей даты и не
+/// имеет длительности. Печатать для неё «2026-10-01T21:00:00.000Z» — вводить
+/// в заблуждение: это не момент времени, а маркер дня. Поэтому для таких
+/// задач честно сообщаем, что конкретное время не назначено.
+String _itemRange(Map<dynamic, dynamic> item) {
+  final isTask = (item['itemType'] ?? '') == 'task';
+  if (isTask && item['endTime'] == null) {
+    return 'время не назначено (задача на весь день)';
+  }
+  return formatRange(item['startTime'], item['endTime']);
 }
 
 /// Возвращает эмодзи для статуса элемента плана.

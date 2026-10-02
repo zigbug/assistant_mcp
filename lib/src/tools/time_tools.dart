@@ -12,7 +12,8 @@ void registerTimeTools(McpServer server, ApiClient api) {
 
   server.registerTool(
     'get_current_time',
-    description: 'Получить текущее время и часовой пояс. Возвращает '
+    description:
+        'Получить текущее время и часовой пояс. Возвращает '
         'время по UTC и локальное время бэкенда, часовой пояс и смещение. '
         'Используйте для определения текущего момента времени.',
     inputSchema: JsonSchema.object(),
@@ -44,14 +45,13 @@ void registerTimeTools(McpServer server, ApiClient api) {
           final hours = abs ~/ 60;
           final minutes = abs % 60;
           buffer.writeln(
-              'Смещение: $sign${hours.toString().padLeft(2, '0')}:'
-              '${minutes.toString().padLeft(2, '0')} '
-              '($offset мин)');
+            'Смещение: $sign${hours.toString().padLeft(2, '0')}:'
+            '${minutes.toString().padLeft(2, '0')} '
+            '($offset мин)',
+          );
         }
 
-        return CallToolResult(
-          content: [TextContent(text: buffer.toString())],
-        );
+        return CallToolResult(content: [TextContent(text: buffer.toString())]);
       } catch (e) {
         logger.severe('Error in get_current_time: $e');
         return CallToolResult(

@@ -18,14 +18,9 @@ McpServer createMcpServer(Config config, ApiClient api) {
 
   // Создаём MCP-сервер с объявлением capabilities
   final server = McpServer(
-    Implementation(
-      name: config.serverName,
-      version: config.serverVersion,
-    ),
+    Implementation(name: config.serverName, version: config.serverVersion),
     options: McpServerOptions(
-      capabilities: ServerCapabilities(
-        tools: ServerCapabilitiesTools(),
-      ),
+      capabilities: ServerCapabilities(tools: ServerCapabilitiesTools()),
     ),
   );
 
@@ -47,8 +42,12 @@ McpServer createMcpServer(Config config, ApiClient api) {
 
   logger.info('✓ All tools registered successfully');
   logger.info('  - Tasks: list_tasks, create_task, update_task, delete_task');
-  logger.info('  - Plans: get_today_plan, generate_plan, get_plan_stats, update_plan_item');
-  logger.info('  - Events: list_events, create_event, update_event, delete_event');
+  logger.info(
+    '  - Plans: get_today_plan, generate_plan, get_plan_stats, update_plan_item',
+  );
+  logger.info(
+    '  - Events: list_events, create_event, update_event, delete_event',
+  );
   logger.info('  - Time: get_current_time');
 
   return server;

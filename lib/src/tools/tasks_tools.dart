@@ -1,7 +1,8 @@
-import 'package:logging/logging.dart';
+﻿import 'package:logging/logging.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 
 import '../api_client.dart';
+import '../utils/date_format.dart';
 import '../utils/query_helpers.dart';
 
 /// Регистрирует tools для работы с задачами.
@@ -17,13 +18,15 @@ void registerTasksTools(McpServer server, ApiClient api) {
   // === list_tasks ===
   server.registerTool(
     'list_tasks',
-    description: 'Получить список задач. Можно фильтровать по статусу, проекту, '
+    description:
+        'Получить список задач. Можно фильтровать по статусу, проекту, '
         'просроченным задачам, задачам на конкретную дату или шаблонам '
         'повторяющихся задач.',
     inputSchema: JsonSchema.object(
       properties: {
         'status': JsonSchema.string(
-          description: 'Статус задач: todo, in_progress, waiting, done, '
+          description:
+              'Статус задач: todo, in_progress, waiting, done, '
               'cancelled, backlog. Если не указан — возвращаются активные '
               'задачи.',
           enumValues: [
@@ -42,11 +45,13 @@ void registerTasksTools(McpServer server, ApiClient api) {
           description: 'Если true — вернуть только просроченные задачи.',
         ),
         'scheduled_date': JsonSchema.string(
-          description: 'Дата в формате YYYY-MM-DD. Вернуть задачи, '
+          description:
+              'Дата в формате YYYY-MM-DD. Вернуть задачи, '
               'запланированные на эту дату.',
         ),
         'include_templates': JsonSchema.boolean(
-          description: 'Если true — включить в выдачу шаблоны повторяющихся '
+          description:
+              'Если true — включить в выдачу шаблоны повторяющихся '
               'задач (по умолчанию скрыты).',
         ),
       },
@@ -62,7 +67,9 @@ void registerTasksTools(McpServer server, ApiClient api) {
         queryParams.addIfTrue('overdue', args['overdue'] as bool?);
         queryParams.addIfPresent('scheduled', args['scheduled_date']);
         queryParams.addIfTrue(
-            'include_templates', args['include_templates'] as bool?);
+          'include_templates',
+          args['include_templates'] as bool?,
+        );
 
         final tasks = await api.get('/tasks', queryParams);
 
@@ -75,6 +82,13 @@ void registerTasksTools(McpServer server, ApiClient api) {
 
         // Форматируем ответ для AI
         final buffer = StringBuffer('Найдено задач: ${tasksList.length}\n\n');
+        if (!queryParams.isNotEmpty) {
+          buffer.writeln(
+            'ВНИМАНИЕ: запрошены все задачи без фильтров. '
+            'Если нужно меньше данных — укажи status, project_id, '
+            'scheduled_date или overdue.\n\n',
+          );
+        }
         for (final task in tasksList) {
           buffer.writeln('• ID: ${task['id']}');
           buffer.writeln('  Название: ${task['title']}');
@@ -84,22 +98,32 @@ void registerTasksTools(McpServer server, ApiClient api) {
           }
           buffer.writeln('  Статус: ${task['status']}');
           buffer.writeln(
-              '  Важность: ${task['importance']}/5, Срочность: ${task['urgency']}/5');
+            '  Важность: ${task['importance']}/5, Срочность: ${task['urgency']}/5',
+          );
           if (task['deadline'] != null) {
-            buffer.writeln('  Дедлайн: ${task['deadline']}');
+            buffer.writeln(
+              '  Дедлайн: ${humanDate(task['deadline'])} '
+              '(${formatRange(task['deadline'], null)})',
+            );
           }
           if (task['estimatedMinutes'] != null) {
             buffer.writeln('  Оценка времени: ${task['estimatedMinutes']} мин');
           }
           if (task['scheduledDate'] != null) {
-            buffer.writeln('  Запланировано: ${task['scheduledDate']}');
+            buffer.writeln(
+              '  Запланировано: ${humanLocalDate(task['scheduledDate'])}',
+            );
           }
           final recurrence = task['recurrence'];
           if (recurrence != null && recurrence != 'none') {
-            buffer.writeln('  Повторение: $recurrence '
-                '(каждые ${task['repeatInterval'] ?? 1})');
+            buffer.writeln(
+              '  Повторение: $recurrence '
+              '(каждые ${task['repeatInterval'] ?? 1})',
+            );
             if (task['repeatEndDate'] != null) {
-              buffer.writeln('  Повтор до: ${task['repeatEndDate']}');
+              buffer.writeln(
+                '  Повтор до: ${humanLocalDate(task['repeatEndDate'])}',
+              );
             }
           }
           if (task['parentId'] != null) {
@@ -108,9 +132,7 @@ void registerTasksTools(McpServer server, ApiClient api) {
           buffer.writeln();
         }
 
-        return CallToolResult(
-          content: [TextContent(text: buffer.toString())],
-        );
+        return CallToolResult(content: [TextContent(text: buffer.toString())]);
       } catch (e) {
         logger.severe('Error in list_tasks: $e');
         return CallToolResult(
@@ -124,7 +146,8 @@ void registerTasksTools(McpServer server, ApiClient api) {
   // === create_task ===
   server.registerTool(
     'create_task',
-    description: 'Создать новую задачу. Обязательное поле — title. '
+    description:
+        'Создать новую задачу. Обязательное поле — title. '
         'Остальные поля опциональны.',
     inputSchema: JsonSchema.object(
       properties: {
@@ -141,7 +164,8 @@ void registerTasksTools(McpServer server, ApiClient api) {
           description: 'Важность от 1 (низкая) до 5 (высокая). По умолчанию 2.',
         ),
         'urgency': JsonSchema.number(
-          description: 'Срочность от 1 (низкая) до 5 (высокая). По умолчанию 2.',
+          description:
+              'Срочность от 1 (низкая) до 5 (высокая). По умолчанию 2.',
         ),
         'deadline': JsonSchema.string(
           description: 'Дедлайн в формате ISO 8601 (YYYY-MM-DDTHH:MM:SSZ).',
@@ -153,23 +177,27 @@ void registerTasksTools(McpServer server, ApiClient api) {
           description: 'Оценка времени выполнения в минутах.',
         ),
         'recurrence': JsonSchema.string(
-          description: 'Повторяемость задачи (создаёт шаблон повторений): '
+          description:
+              'Повторяемость задачи (создаёт шаблон повторений): '
               'none, daily, weekly, monthly, yearly. По умолчанию none. '
               'Если задано не none — создаётся шаблон, из которого '
               'материализуются экземпляры на 30 дней вперёд.',
           enumValues: ['none', 'daily', 'weekly', 'monthly', 'yearly'],
         ),
         'repeat_interval': JsonSchema.number(
-          description: 'Интервал повтора: каждые N дней/недель/месяцев/лет. '
+          description:
+              'Интервал повтора: каждые N дней/недель/месяцев/лет. '
               'По умолчанию 1. Должно быть >= 1. Применяется вместе с '
               'recurrence.',
         ),
         'repeat_end_date': JsonSchema.string(
-          description: 'Дата окончания серии повторов в формате ISO 8601. '
+          description:
+              'Дата окончания серии повторов в формате ISO 8601. '
               'Опционально. Применяется вместе с recurrence.',
         ),
         'parent_id': JsonSchema.number(
-          description: 'ID шаблона-родителя, если создаётся экземпляр '
+          description:
+              'ID шаблона-родителя, если создаётся экземпляр '
               'повторяющейся задачи.',
         ),
       },
@@ -204,7 +232,8 @@ void registerTasksTools(McpServer server, ApiClient api) {
         return CallToolResult(
           content: [
             TextContent(
-              text: '✓ Задача успешно создана!\n'
+              text:
+                  '✓ Задача успешно создана!\n'
                   'ID: $taskId\n'
                   'Название: $title\n'
                   '${isRecurring ? 'Повторение: $recurrence (каждые ${args['repeat_interval'] ?? 1})\n' : ''}',
@@ -224,19 +253,16 @@ void registerTasksTools(McpServer server, ApiClient api) {
   // === update_task ===
   server.registerTool(
     'update_task',
-    description: 'Обновить существующую задачу. Можно изменить статус, '
+    description:
+        'Обновить существующую задачу. Можно изменить статус, '
         'название, описание, приоритеты, дедлайн и другие поля.',
     inputSchema: JsonSchema.object(
       properties: {
         'task_id': JsonSchema.number(
           description: 'ID задачи для обновления (обязательное поле).',
         ),
-        'title': JsonSchema.string(
-          description: 'Новое название задачи.',
-        ),
-        'description': JsonSchema.string(
-          description: 'Новое описание задачи.',
-        ),
+        'title': JsonSchema.string(description: 'Новое название задачи.'),
+        'description': JsonSchema.string(description: 'Новое описание задачи.'),
         'status': JsonSchema.string(
           description: 'Новый статус задачи.',
           enumValues: [
@@ -251,31 +277,32 @@ void registerTasksTools(McpServer server, ApiClient api) {
         'importance': JsonSchema.number(
           description: 'Новая важность от 1 до 5.',
         ),
-        'urgency': JsonSchema.number(
-          description: 'Новая срочность от 1 до 5.',
-        ),
+        'urgency': JsonSchema.number(description: 'Новая срочность от 1 до 5.'),
         'deadline': JsonSchema.string(
-          description: 'Новый дедлайн в формате ISO 8601. '
+          description:
+              'Новый дедлайн в формате ISO 8601. '
               'Передайте пустую строку "" чтобы убрать дедлайн.',
         ),
-        'project_id': JsonSchema.number(
-          description: 'Новый ID проекта.',
-        ),
+        'project_id': JsonSchema.number(description: 'Новый ID проекта.'),
         'scheduled_date': JsonSchema.string(
-          description: 'Новая дата, на которую запланирована задача '
+          description:
+              'Новая дата, на которую запланирована задача '
               '(YYYY-MM-DD).',
         ),
         'recurrence': JsonSchema.string(
-          description: 'Повторяемость задачи: none, daily, weekly, monthly, '
+          description:
+              'Повторяемость задачи: none, daily, weekly, monthly, '
               'yearly. Установите "none", чтобы остановить серию повторов.',
           enumValues: ['none', 'daily', 'weekly', 'monthly', 'yearly'],
         ),
         'repeat_interval': JsonSchema.number(
-          description: 'Интервал повтора: каждые N дней/недель/месяцев/лет. '
+          description:
+              'Интервал повтора: каждые N дней/недель/месяцев/лет. '
               'Должно быть >= 1.',
         ),
         'repeat_end_date': JsonSchema.string(
-          description: 'Дата окончания серии повторов в формате ISO 8601. '
+          description:
+              'Дата окончания серии повторов в формате ISO 8601. '
               'Передайте пустую строку "" чтобы убрать ограничение.',
         ),
       },
@@ -299,9 +326,7 @@ void registerTasksTools(McpServer server, ApiClient api) {
 
         // Дедлайн и repeat_end_date: поддерживаем явное обнуление пустой строкой
         if (args['deadline'] != null) {
-          body['deadline'] = args['deadline'] == ''
-              ? null
-              : args['deadline'];
+          body['deadline'] = args['deadline'] == '' ? null : args['deadline'];
         }
         if (args['repeat_end_date'] != null) {
           body['repeatEndDate'] = args['repeat_end_date'] == ''
@@ -322,9 +347,7 @@ void registerTasksTools(McpServer server, ApiClient api) {
         await api.patch('/tasks/$taskId', body);
 
         return CallToolResult(
-          content: [
-            TextContent(text: '✓ Задача #$taskId успешно обновлена!'),
-          ],
+          content: [TextContent(text: '✓ Задача #$taskId успешно обновлена!')],
         );
       } catch (e) {
         logger.severe('Error in update_task: $e');
@@ -339,7 +362,8 @@ void registerTasksTools(McpServer server, ApiClient api) {
   // === delete_task ===
   server.registerTool(
     'delete_task',
-    description: 'Удалить задачу. Это необратимая операция — используйте осторожно.',
+    description:
+        'Удалить задачу. Это необратимая операция — используйте осторожно.',
     inputSchema: JsonSchema.object(
       properties: {
         'task_id': JsonSchema.number(
