@@ -40,8 +40,16 @@ class ApiClient {
   ///
   /// [endpoint] — путь без базового URL.
   /// [body] — тело запроса (будет сериализовано в JSON).
-  Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
-    final uri = Uri.parse('${_config.backendUrl}$endpoint');
+  /// [queryParams] — query-параметры URL. Нужны эндпоинтам, которые читают
+  /// аргументы из query, а не из тела (например, `daily-plans/generate?date=`).
+  Future<dynamic> post(
+    String endpoint,
+    Map<String, dynamic> body, {
+    Map<String, String>? queryParams,
+  }) async {
+    final uri = Uri.parse(
+      '${_config.backendUrl}$endpoint',
+    ).replace(queryParameters: queryParams);
 
     _logger.fine('POST $uri');
     _logger.finest('Body: $body');

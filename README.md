@@ -57,6 +57,7 @@ MCP-сервер для AI-ассистента. Предоставляет tool
 - **`generate_plan`** — Сгенерировать план на указанную дату
 - **`get_plan_stats`** — Получить статистику по плану (% выполнения, время)
 - **`update_plan_item`** — Обновить элемент плана (статус, reschedule, заметка)
+- **`delete_plan`** — Удалить план дня вместе со всеми элементами
 
 ### Events (События)
 
@@ -146,7 +147,7 @@ MCP-сервер для AI-ассистента. Предоставляет tool
       Assistant MCP Server is running!
       Transport: stdio (stdin/stdout)
       Backend: http://localhost:8081/api/v1
-      Tools: 13 (4 tasks + 4 plans + 4 events + 1 time)
+      Tools: 14 (4 tasks + 5 plans + 4 events + 1 time)
     ============================================================
    ```
    
@@ -157,7 +158,7 @@ MCP-сервер для AI-ассистента. Предоставляет tool
      Transport: Streamable HTTP
      URL: http://localhost:8082/mcp
      Backend: http://localhost:8081/api/v1
-      Tools: 13 (4 tasks + 4 plans + 4 events + 1 time)
+      Tools: 14 (4 tasks + 5 plans + 4 events + 1 time)
    ============================================================
    ```
 

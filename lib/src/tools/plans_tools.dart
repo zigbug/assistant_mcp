@@ -12,6 +12,7 @@ import '../utils/query_helpers.dart';
 /// - `generate_plan` — сгенерировать план на указанную дату
 /// - `get_plan_stats` — получить статистику по плану
 /// - `update_plan_item` — обновить элемент плана (статус, reschedule)
+/// - `delete_plan` — удалить план дня вместе со всеми элементами
 void registerPlansTools(McpServer server, ApiClient api) {
   final logger = Logger('PlansTools');
 
@@ -106,7 +107,13 @@ void registerPlansTools(McpServer server, ApiClient api) {
         final queryParams = <String, String>{};
         queryParams.addIfPresent('date', args['date']);
 
-        final result = await api.post('/daily-plans/generate', queryParams);
+        // Дата уходит в query: бэкенд читает `date` из request.url.queryParameters,
+        // поэтому в теле её быть не должно.
+        final result = await api.post(
+          '/daily-plans/generate',
+          const {},
+          queryParams: queryParams.isEmpty ? null : queryParams,
+        );
 
         // Ответ: `{plan: {...}, items: [...], stats: {...}}`.
         final meta = _planMeta(result);
@@ -298,6 +305,45 @@ void registerPlansTools(McpServer server, ApiClient api) {
         return CallToolResult(
           isError: true,
           content: [TextContent(text: 'Ошибка при обновлении элемента: $e')],
+        );
+      }
+    },
+  );
+
+  // === delete_plan ===
+  server.registerTool(
+    'delete_plan',
+    description:
+        'Удалить план дня вместе со всеми его элементами. '
+        'Это необратимая операция: отметки о выполнении и заметки будут потеряны. '
+        'Используй, чтобы убрать ошибочно созданный план или сбросить день перед '
+        'новой генерацией.',
+    inputSchema: JsonSchema.object(
+      properties: {
+        'plan_id': JsonSchema.number(
+          description: 'ID плана (обязательное поле).',
+        ),
+      },
+      required: ['plan_id'],
+    ),
+    callback: (args, extra) async {
+      try {
+        logger.info('delete_plan called with args: $args');
+
+        final planId = args['plan_id'] as int;
+
+        await api.delete('/daily-plans/$planId');
+
+        return CallToolResult(
+          content: [
+            TextContent(text: '🗑️ План #$planId удалён вместе с элементами.'),
+          ],
+        );
+      } catch (e) {
+        logger.severe('Error in delete_plan: $e');
+        return CallToolResult(
+          isError: true,
+          content: [TextContent(text: 'Ошибка при удалении плана: $e')],
         );
       }
     },
