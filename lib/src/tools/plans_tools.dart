@@ -73,6 +73,30 @@ void registerPlansTools(McpServer server, ApiClient api) {
         }
 
         return CallToolResult(content: [TextContent(text: buffer.toString())]);
+      } on ApiException catch (e) {
+        // Отсутствие плана — это не ошибка, а обычное состояние: его ещё
+        // никто не собирал. Бэкенд отвечает 404, и без этой ветки модель
+        // получает «ApiException(404, No plan for today…)» вместо ответа на
+        // вопрос «что у меня сегодня».
+        if (e.statusCode == 404) {
+          logger.info('No plan for today (404) — сообщаю штатную ситуацию');
+          return CallToolResult(
+            content: [
+              TextContent(
+                text:
+                    '📋 Плана на сегодня ещё нет — его никто не собирал.\n\n'
+                    'События и задачи при этом могут существовать: они лежат '
+                    'в списках и попадут в план при генерации.\n'
+                    'Чтобы собрать день, вызови generate_plan.',
+              ),
+            ],
+          );
+        }
+        logger.severe('ApiException in get_today_plan: $e');
+        return CallToolResult(
+          isError: true,
+          content: [TextContent(text: 'Ошибка при получении плана: $e')],
+        );
       } catch (e) {
         logger.severe('Error in get_today_plan: $e');
         return CallToolResult(
