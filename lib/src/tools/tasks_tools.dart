@@ -1,4 +1,4 @@
-﻿import 'package:logging/logging.dart';
+import 'package:logging/logging.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide Logger;
 
 import '../api_client.dart';
@@ -109,6 +109,12 @@ void registerTasksTools(McpServer server, ApiClient api) {
           if (task['estimatedMinutes'] != null) {
             buffer.writeln('  Оценка времени: ${task['estimatedMinutes']} мин');
           }
+          if (task['scheduledTime'] != null) {
+            final start = task['scheduledTime'] as int;
+            final hh = (start ~/ 60).toString().padLeft(2, '0');
+            final mm = (start % 60).toString().padLeft(2, '0');
+            buffer.writeln('  Время начала: $hh:$mm');
+          }
           if (task['scheduledDate'] != null) {
             buffer.writeln(
               '  Запланировано: ${humanLocalDate(task['scheduledDate'])}',
@@ -176,6 +182,14 @@ void registerTasksTools(McpServer server, ApiClient api) {
         'estimated_minutes': JsonSchema.number(
           description: 'Оценка времени выполнения в минутах.',
         ),
+        'scheduled_time': JsonSchema.string(
+          description:
+              'Время начала в течение дня в формате "HH:MM" (например, '
+              '"09:30"). Планировщик поставит задачу ровно на этот час. '
+              'Требует также estimated_minutes: без длительности слот '
+              'неизвестен. Если слот занят — задача останется без времени, '
+              'а не переедет на другое.',
+        ),
         'recurrence': JsonSchema.string(
           description:
               'Повторяемость задачи (создаёт шаблон повторений): '
@@ -218,6 +232,7 @@ void registerTasksTools(McpServer server, ApiClient api) {
         body.addIfPresent('deadline', args['deadline']);
         body.copyFrom(args, 'scheduled_date', 'scheduledDate');
         body.copyFrom(args, 'estimated_minutes', 'estimatedMinutes');
+        body.copyFrom(args, 'scheduled_time', 'scheduledTime');
         body.addIfPresent('recurrence', args['recurrence']);
         body.copyFrom(args, 'repeat_interval', 'repeatInterval');
         body.copyFrom(args, 'repeat_end_date', 'repeatEndDate');
@@ -289,6 +304,18 @@ void registerTasksTools(McpServer server, ApiClient api) {
               'Новая дата, на которую запланирована задача '
               '(YYYY-MM-DD).',
         ),
+        'estimated_minutes': JsonSchema.number(
+          description:
+              'Новая оценка времени выполнения в минутах. '
+              'Именно она превращает задачу из «на весь день» в блок '
+              'в расписании.',
+        ),
+        'scheduled_time': JsonSchema.string(
+          description:
+              'Новое время начала в течение дня, "HH:MM". Передайте пустую '
+              'строку "" чтобы убрать фиксированное время и вернуть '
+              'задачу в автоматическую раскладку.',
+        ),
         'recurrence': JsonSchema.string(
           description:
               'Повторяемость задачи: none, daily, weekly, monthly, '
@@ -335,6 +362,13 @@ void registerTasksTools(McpServer server, ApiClient api) {
         }
         if (args['scheduled_date'] != null) {
           body['scheduledDate'] = args['scheduled_date'];
+        }
+        body.copyFrom(args, 'estimated_minutes', 'estimatedMinutes');
+        // Пустая строка сбрасывает фиксированное время начала.
+        if (args['scheduled_time'] != null) {
+          body['scheduledTime'] = args['scheduled_time'] == ''
+              ? null
+              : args['scheduled_time'];
         }
 
         if (body.isEmpty) {

@@ -156,6 +156,28 @@ void registerPlansTools(McpServer server, ApiClient api) {
           'отметки о выполнении и заметки будут потеряны.',
         );
 
+        // Предупреждаем явно: иначе «не поместилось» и «на весь день»
+        // выглядят в списке одинаково, и пользователь решит, что всё
+        // разложено по часам.
+        final serverStats = result is Map ? result['stats'] : null;
+        final unplaced = _intOrZero(serverStats?['unplacedTasks']);
+        final noEstimate = _intOrZero(serverStats?['withoutEstimate']);
+        if (unplaced > 0 || noEstimate > 0) {
+          buffer.writeln('\n⚠️ Не всё удалось разложить:');
+          if (unplaced > 0) {
+            buffer.writeln(
+              '  ⏳ $unplaced задач с оценкой не поместились в день. '
+              'Освободи время или разбей их.',
+            );
+          }
+          if (noEstimate > 0) {
+            buffer.writeln(
+              '  ⏱ $noEstimate задач без оценки времени — у них нет '
+              'длительности. Задай estimated_minutes, чтобы они получили слот.',
+            );
+          }
+        }
+
         return CallToolResult(content: [TextContent(text: buffer.toString())]);
       } catch (e) {
         logger.severe('Error in generate_plan: $e');
@@ -368,12 +390,30 @@ Map<String, dynamic> _planMeta(Object? response) {
 /// имеет длительности. Печатать для неё «2026-10-01T21:00:00.000Z» — вводить
 /// в заблуждение: это не момент времени, а маркер дня. Поэтому для таких
 /// задач честно сообщаем, что конкретное время не назначено.
+///
+/// Задача с оценкой, которая не поместилась в день, тоже остаётся без
+/// интервала, но это другая история — про неё бэкенд пишет в заметке
+/// «не поместилась», и она заслуживает отдельной формулировки.
 String _itemRange(Map<dynamic, dynamic> item) {
   final isTask = (item['itemType'] ?? '') == 'task';
   if (isTask && item['endTime'] == null) {
+    final note = '${item['note'] ?? ''}';
+    if (note.contains(_didNotFitMarker)) {
+      return 'не поместилась в день — время не назначено';
+    }
     return 'время не назначено (задача на весь день)';
   }
   return formatRange(item['startTime'], item['endTime']);
+}
+
+/// Маркер в заметке элемента, который ставит бэкенд для задачи без слота.
+const _didNotFitMarker = 'не поместилась';
+
+/// Приводит значение статистики к целому числу, игнорируя null и строки.
+int _intOrZero(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return 0;
 }
 
 /// Возвращает эмодзи для статуса элемента плана.
